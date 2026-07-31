@@ -13,9 +13,9 @@
 Живой дашборд задач Александра, артефакт id: moi-zadachi. Дизайн «тёплая бумага» (хендофф Claude Design, 07.2026).
 1. Данные — в <script id="boardData" type="application/json">. Карточка: id, plain, short, ice, iceOn, done, color,
    subs[{plain,done}], due('YYYY-MM-DD[ HH:MM]'), prio(0/1/2), desc, doneAt(ISO), fromCol. Колонка: name, cards, preset(0..5).
-   Бейдж карточки НЕ хранится — он вычисляется из plain: часть до «:» или до «. » перед заглавной (≤40 симв.).
+   Бейдж карточки НЕ хранится — он вычисляется из plain: часть до «:» или до «. » (≤60 симв.).
    ★ Три дома, один элемент — одно место (30.07): Тактика/Стратегия (взято в работу) · Очередь (сформулировано, ждёт часа,
-   поле queue[] у проекта, автосортировка по ice, pin=true поднимает наверх) · Идеи (проект inbox, сырьё, поле tag = проект).
+   поле queue[] у проекта, порядок ручной перетаскиванием, «Отсортировать по баллу» — пунктом меню колонки) · Идеи (проект inbox, сырьё, поле tag = проект).
    Готово — терминальный дом. Переходы — пунктами меню карточки; флага iceOn больше нет, балл живёт в поле ice.
    ★ Дизайн карточки (ход 24c, 30.07): бейдж БЕЗ плашки — первые слова выводятся жирным (700) цветом колонки
    прямо в заголовке; заголовок 20px/1.42; подзадачи 17px/1.45 (#5f584f), жирная голова цветом колонки через --btone;
@@ -93,7 +93,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;back
 .wellh input{text-transform:none;letter-spacing:0;font-weight:600;font-size:14px;line-height:1;width:170px;padding:2px 6px;border:1px solid var(--line-hi);border-radius:5px;background:#fffdfa;color:inherit}
 .wellh .colmb{margin-left:auto;display:flex;align-items:center;justify-content:center;width:34px;height:34px;margin-right:-6px;border:1px solid var(--line);background:transparent;font-weight:400;font-size:18px;line-height:1;color:var(--t-svc);cursor:pointer;border-radius:7px;transition:color .14s ease,border-color .14s ease,background .14s ease}
 .wellh .colmb:hover{color:var(--accent);border-color:var(--line-hi);background:rgba(255,255,255,.5)}
-.stack{flex:1;min-height:0;overflow-y:auto;scrollbar-gutter:stable;padding:0 14px 0 20px;display:flex;flex-direction:column;gap:12px}
+.stack{flex:1;min-height:70px;overflow-y:auto;scrollbar-gutter:stable;padding:0 14px 0 20px;display:flex;flex-direction:column;gap:12px}
 .stack.over{outline:2px dashed rgba(138,90,63,.28);outline-offset:-4px;border-radius:8px}
 .wellh{cursor:grab}
 .well.coldrag{outline:2px dashed var(--line-drag);outline-offset:-3px}
@@ -132,7 +132,8 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;back
 .card.heavy .seg{height:12px}
 .chip{font-weight:500;font-size:13px;line-height:1;padding:6px 11px;border-radius:5px;color:var(--t-2nd);background:var(--chip-bg)}
 .chip.over{color:#fff;background:#c2551f}
-.chip.crit{color:var(--accent);background:#f6ece1}
+.chip.warn{color:var(--t-h1);background:#f6e6d4}
+.chip.crit{color:#fff;background:#c2401f}
 .prog{padding-top:14px;padding-bottom:0;display:flex;align-items:center;gap:12px;cursor:pointer}
 .bar{flex:1;height:3px;background:var(--track);border-radius:3px;overflow:hidden}
 .bar i{display:block;height:100%;border-radius:3px}
@@ -357,8 +358,8 @@ function tone(i, col){const p = (col && col.preset!=null) ? col.preset : (i%TONE
 /* бейдж = первые слова до «:» или «. » перед заглавной */
 function autoSplit(s){
   const ci = s.indexOf(':');
-  if(ci > 1 && ci <= 40) return [s.slice(0,ci).trim(), s.slice(ci+1).trim()];
-  const m = s.match(/^(.{2,40}?[.!?])\s+(?=[А-ЯЁA-Z0-9])/);
+  if(ci > 1 && ci <= 60) return [s.slice(0,ci).trim(), s.slice(ci+1).trim()];
+  const m = s.match(/^(.{2,60}?[.!?])\s+(?=\S)/);
   if(m) return [m[1].replace(/[.!?]$/,'').trim(), s.slice(m[0].length).trim()];
   const d = s.match(/^(.{2,32}?)\s+[—–]\s+(.+)$/);
   if(d) return [d[1].trim(), d[2].trim()];
@@ -478,7 +479,9 @@ function renderCard(c, col, colIdx, heavy){
   if(c.color) d.style.background = 'linear-gradient(rgba('+rgb(c.color)+',.15),rgba('+rgb(c.color)+',.15)), #fff';
   const [badge, title] = splitTitle(c.plain, c);
 
-  d.style.borderLeft = '3px solid '+(c.color || T.spine);
+  d.style.borderLeft = c.prio===2 ? '5px solid #c2401f'
+    : c.prio===1 ? '4px solid var(--accent)'
+    : '3px solid '+(c.color || T.spine);
 
   const brow = el('div','brow');
   if(mode==='ice' && c.ice != null){
@@ -511,8 +514,7 @@ function renderCard(c, col, colIdx, heavy){
     const lbl = dv.slice(8,10)+'.'+dv.slice(5,7)+(tv?' '+tv:'');
     chips.push(over ? '<span class="chip over">просрочено · '+lbl+'</span>' : '<span class="chip">до '+lbl+'</span>');
   }
-  if(c.pin) chips.push('<span class="chip crit">закреплено</span>');
-  if(c.prio===1) chips.push('<span class="chip crit">важно</span>');
+  if(c.prio===1) chips.push('<span class="chip warn">важно</span>');
   if(c.prio===2) chips.push('<span class="chip crit">критично</span>');
   if(c.desc) chips.push('<span class="chip dsc" title="есть описание">≡</span>');
   if(chips.length) d.appendChild(el('div','mrow', chips.join('')));
@@ -539,6 +541,7 @@ function renderCard(c, col, colIdx, heavy){
         logChange('✕ удалена подзадача «'+s.plain+'» из «'+c.short+'» ('+proj().label+')'); rerender() };
       const cb = el('span','cbx','✓');
       cb.onclick = (e)=>{ e.stopPropagation(); s.done = !s.done;
+        if(s.done){ c.subs.splice(c.subs.indexOf(s),1); c.subs.push(s) }
         logChange((s.done?'✓ отмечена':'◻ снята')+' подзадача «'+s.plain+'» в «'+c.short+'» ('+proj().label+')'); rerender() };
       const chkw = el('span','schk'); chkw.appendChild(cb);
       const delw = el('span','sdelw'); delw.appendChild(del);
@@ -599,11 +602,6 @@ function cardMenu(btn, c, col, cardEl){
   } else if(home==='queue'){
     mk('↑ В тактику', ()=>{ closeMenu(); toTactics(c, col) });
     mk('↓ В идеи',    ()=>{ closeMenu(); toIdeas(c, col) });
-    mk(c.pin?'▽ Открепить':'△ Закрепить сверху', ()=>{
-      if(c.pin) delete c.pin; else c.pin = true;
-      logChange((c.pin?'△ закреплена сверху':'▽ откреплена')+' «'+c.short+'» (Очередь, '+proj().label+')');
-      closeMenu(); rerender();
-    });
   } else {
     mk('↑ В тактику', ()=>{ closeMenu(); toTactics(c, col) });
     mk('↑ На скамейку', ()=>{ closeMenu(); toQueue(c, col) });
@@ -686,11 +684,11 @@ function toQueue(c, col){
 function toTactics(c, col){
   const tp = targetProject(c);
   if(!tp.tactics || !tp.tactics.length) tp.tactics = [{name:'Делаю сейчас', cards:[], preset:0}];
-  delete c.tag; delete c.pin;
+  delete c.tag;
   moveCard(c, col, tp.tactics[0], tp.label+', '+tp.tactics[0].name);
 }
 function toIdeas(c, col){
-  c.tag = proj().label; delete c.pin;
+  c.tag = proj().label;
   moveCard(c, col, inboxCol(), 'Идеи');
 }
 function completeCard(c, col){
@@ -791,7 +789,7 @@ function buildWell(col, i, cols, heavy){
   };
   aw.appendChild(ab); w.appendChild(aw);
 
-  stack.addEventListener('dragover', e=>{
+  const stackDragOver = e=>{
     if(window.__dragCol || !window.__drag) return;
     e.preventDefault(); stack.classList.add('over');
     const line = dropline();
@@ -801,9 +799,8 @@ function buildWell(col, i, cols, heavy){
     for(const it of items){ const b = it.getBoundingClientRect();
       if(e.clientY < b.top + b.height/2){ after = it; break } }
     if(after) stack.insertBefore(line, after); else stack.appendChild(line);
-  });
-  stack.addEventListener('dragleave', ()=>stack.classList.remove('over'));
-  stack.addEventListener('drop', e=>{
+  };
+  const stackDrop = e=>{
     if(window.__dragCol) return;
     e.preventDefault(); e.stopPropagation(); stack.classList.remove('over');
     const dg = window.__drag; window.__drag = null; if(!dg) return;
@@ -823,7 +820,12 @@ function buildWell(col, i, cols, heavy){
     if(src === col) logChange('«'+card.short+'» ('+proj().label+', '+col.name+'): переставлена '+place);
     else logChange('«'+card.short+'» ('+proj().label+'): '+src.name+' → '+col.name+', '+place);
     rerender();
-  });
+  };
+  stack.addEventListener('dragover', stackDragOver);
+  stack.addEventListener('dragleave', ()=>stack.classList.remove('over'));
+  stack.addEventListener('drop', stackDrop);
+  w.addEventListener('dragover', stackDragOver);
+  w.addEventListener('drop', stackDrop);
 
   cmb.onclick = (e)=>{
     e.stopPropagation();
@@ -839,6 +841,8 @@ function buildWell(col, i, cols, heavy){
         closeMenu(); rerender(); });
     });
     mk('＋ Колонка справа', ()=>{ closeMenu(); addColumnAfter(cols, cols.indexOf(col)) });
+    if(mode==='ice') mk('⇅ Отсортировать по баллу', ()=>{ closeMenu();
+      sortQueue(); logChange('⇅ Скамейка отсортирована по баллу ('+proj().label+')'); rerender() });
     mk('✕ Удалить колонку', ()=>{ closeMenu();
       const n = col.cards.length;
       cols.splice(cols.indexOf(col),1);
@@ -893,13 +897,11 @@ function queueCols(){ const p = proj(); if(!Array.isArray(p.queue)) p.queue = [{
 function sortQueue(){
   queueCols().forEach(col=>{
     col.cards.sort((a,b)=>{
-      const pa = a.pin?1:0, pb = b.pin?1:0; if(pa!==pb) return pb-pa;
       const ia = (a.ice==null?-1:a.ice), ib2 = (b.ice==null?-1:b.ice); return ib2-ia;
     });
   });
 }
 function viewIce(){
-  sortQueue();
   const v = el('div','view on qview'); const wrap = el('div','queuewrap');
   const cols = queueCols();
   wrap.appendChild(buildBoard(cols, false));
