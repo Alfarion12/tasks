@@ -55,6 +55,13 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;back
 .row1{display:flex;align-items:baseline;justify-content:space-between;padding-bottom:22px;gap:16px}
 .ideastop.on{font-weight:700;color:var(--t-h1)}
 .date{font-weight:400;font-size:14px;line-height:1;letter-spacing:.1em;color:var(--t-mut)}
+.row1r{display:flex;align-items:center;gap:20px}
+.zoom{display:flex;align-items:center;gap:3px}
+.zoom button{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);
+  background:transparent;border-radius:7px;color:var(--t-mut);font-size:16px;line-height:1;cursor:pointer;
+  transition:color .14s ease,border-color .14s ease}
+.zoom button:hover{color:var(--accent);border-color:var(--line-hi)}
+.zoom #zVal{min-width:48px;text-align:center;font-size:13px;color:var(--t-mut);letter-spacing:.04em;cursor:pointer}
 .row2{display:flex;align-items:center;justify-content:space-between;gap:24px;padding-bottom:24px;flex-wrap:wrap}
 .modeswrap{display:flex;align-items:center;gap:26px}
 .titlerow{display:flex;align-items:baseline;gap:18px}
@@ -258,7 +265,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;back
 <script id="boardData" type="application/json">{"updated":"30.07.2026","projects":[{"id":"skrillme","label":"Skrillme","strategy":[{"name":"Стратегия","cards":[],"preset":0}],"tactics":[{"name":"Делаю сейчас","cards":[],"preset":0},{"name":"В работе","cards":[],"preset":1},{"name":"На Контроле","cards":[],"preset":2}],"queue":[],"done":[{"name":"Выполнено","cards":[],"preset":1}]},{"id":"chai","label":"Чай","strategy":[{"name":"Фокус (до 27.08)","cards":[],"preset":0}],"tactics":[{"name":"Делаю (эта неделя)","cards":[],"preset":0},{"name":"Ждёт (до выставки 27.08)","cards":[],"preset":1},{"name":"Контроль","cards":[],"preset":2}],"queue":[],"done":[{"name":"Выполнено","cards":[],"preset":1}]},{"id":"inbox","label":"Идеи","strategy":[],"tactics":[{"name":"Инбокс (до триажа)","cards":[],"preset":0},{"name":"В работу","cards":[],"preset":1},{"name":"Отпустил","cards":[],"preset":2}],"queue":[],"done":[{"name":"Выполнено","cards":[],"preset":1}]}]}</script>
 <div id="bgphoto"></div><div id="bgveil"></div>
 <div id="stage"><div class="shell">
-  <div class="row1"><div class="titlerow"><button id="tasksBtn" class="ideastop on">Мои задачи</button><span class="tdiv"></span><button id="ideasBtn" class="ideastop">Идеи</button></div><span class="date mono">30.07.2026</span></div>
+  <div class="row1"><div class="titlerow"><button id="tasksBtn" class="ideastop on">Мои задачи</button><span class="tdiv"></span><button id="ideasBtn" class="ideastop">Идеи</button></div><div class="row1r"><span class="zoom"><button id="zOut" title="Мельче">−</button><span id="zVal" class="mono">100%</span><button id="zIn" title="Крупнее">+</button></span><span class="date mono" id="hdate"></span></div></div>
   <div class="row2"><div class="modeswrap" id="modeswrap"><div class="modes" id="modes"></div></div><div class="projs" id="projs"></div></div>
   <div class="content" id="content"></div>
   <div class="foot" id="foot">
@@ -389,6 +396,13 @@ function logChange(m){ changes.push(m); COPIED = false; updateFoot() }
 
 /* ── меню ── */
 let SCALE = 1, OFFX = 0;
+let ZOOM = Math.min(1.6, Math.max(.6, (+localStorage.getItem('mz_zoom') || 100) / 100));
+function setZoom(z){
+  ZOOM = Math.min(1.6, Math.max(.6, Math.round(z*100)/100));
+  try{ localStorage.setItem('mz_zoom', Math.round(ZOOM*100)) }catch(_){}
+  const v = document.getElementById('zVal'); if(v) v.textContent = Math.round(ZOOM*100)+'%';
+  fitStage(); closeMenu();
+}
 
 /* ── перетаскивание: свой призрак вместо системного ── */
 const EMPTY_IMG = new Image();
@@ -422,12 +436,22 @@ document.addEventListener('drop', ()=>{ if(GHOST){ GHOST.remove(); GHOST = null 
 function fitStage(){
   const st = document.getElementById('stage');
   const w = window.innerWidth, h = window.innerHeight;
-  SCALE = Math.min(w/1920, h/1080);
-  SCALE = Math.max(.45, Math.min(1, SCALE));
-  OFFX = Math.max(0, (w - 1920*SCALE)/2);
+  const BW = Math.round(1920 / ZOOM), BH = Math.round(940 / ZOOM);
+  st.style.width = BW+"px"; st.style.height = BH+"px";
+  SCALE = Math.max(.45, Math.min(2.2, Math.min(w/BW, h/BH)));
+  OFFX = Math.max(0, (w - BW*SCALE)/2);
   st.style.transform = 'translateX('+OFFX+'px) scale('+SCALE+')';
 }
 window.addEventListener('resize', ()=>{ fitStage(); closeMenu() });
+document.addEventListener('DOMContentLoaded', ()=>{
+  const hd = document.getElementById('hdate');
+  if(hd) hd.textContent = new Date().toLocaleDateString('ru-RU');
+  const zi = document.getElementById('zIn'), zo = document.getElementById('zOut'), zv = document.getElementById('zVal');
+  if(zv) zv.textContent = Math.round(ZOOM*100)+'%';
+  if(zi) zi.onclick = ()=> setZoom(ZOOM + .05);
+  if(zo) zo.onclick = ()=> setZoom(ZOOM - .05);
+  if(zv) zv.onclick = ()=> setZoom(1);
+});
 function placeMenu(x, y){
   menu.style.visibility='hidden'; menu.style.display='block';
   menu.style.transform = 'scale('+SCALE+')';
