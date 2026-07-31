@@ -327,6 +327,7 @@ async function ghSave(data){
   return true;
 }
 (async function(){
+  if(!localStorage.getItem('ghToken')) ghToken();
   const remote = await ghLoad();
   if(remote && !changes.length){ DATA = remote; SAVED = JSON.parse(JSON.stringify(DATA)); rerender() }
 })();
