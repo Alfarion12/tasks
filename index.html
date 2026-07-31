@@ -318,7 +318,7 @@ async function ghSave(data){
     const cur = await fetch(GH_API, {headers:{'Authorization':'token '+t,'Accept':'application/vnd.github+json'}});
     if(cur.ok){ const j = await cur.json(); ghSha = j.sha }
   }catch(e){}
-  const body = {message:'Update board '+new Date().toISOString(), content:b64EncodeUtf8(JSON.stringify(data)), sha:ghSha};
+  const body = {message:'Update board '+new Date().toISOString(), content:b64EncodeUtf8(JSON.stringify(data, null, 2)), sha:ghSha};
   const res = await fetch(GH_API, {method:'PUT', headers:{'Authorization':'token '+t,'Accept':'application/vnd.github+json','Content-Type':'application/json'}, body:JSON.stringify(body)});
   if(res.status===401){ localStorage.removeItem('ghToken'); throw new Error('токен не принят, введите заново') }
   if(res.status===409){
