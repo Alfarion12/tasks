@@ -321,6 +321,10 @@ async function ghSave(data){
   const body = {message:'Update board '+new Date().toISOString(), content:b64EncodeUtf8(JSON.stringify(data)), sha:ghSha};
   const res = await fetch(GH_API, {method:'PUT', headers:{'Authorization':'token '+t,'Accept':'application/vnd.github+json','Content-Type':'application/json'}, body:JSON.stringify(body)});
   if(res.status===401){ localStorage.removeItem('ghToken'); throw new Error('токен не принят, введите заново') }
+  if(res.status===409){
+    try{ const cur2 = await fetch(GH_API, {headers:{'Authorization':'token '+t,'Accept':'application/vnd.github+json'}}); if(cur2.ok){ const j2 = await cur2.json(); ghSha = j2.sha } }catch(e){}
+    throw new Error('на сервере уже более новая версия (сохранили с другого устройства/вкладки) — обновите страницу и повторите изменение');
+  }
   if(!res.ok) throw new Error('ошибка '+res.status);
   const j = await res.json();
   ghSha = j.content.sha;
