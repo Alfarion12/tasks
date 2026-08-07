@@ -1217,7 +1217,7 @@ function updateFoot(){
   else { st.textContent='Сохранено'; st.classList.add('saved'); st.onclick=null }
 
   const ub = document.getElementById('undoBtn');
-  if(UNDO_STACK.length){ ub.style.display=''; ub.textContent='Отменить: '+UNDO_STACK[UNDO_STACK.length-1].label }
+  if(UNDO_STACK.length){ ub.style.display=''; ub.textContent='Отменить' }
   else ub.style.display='none';
 
   const c1 = document.getElementById('copyBtn'), c2 = document.getElementById('clearBtn');
