@@ -239,6 +239,11 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;back
   padding:0 24px;border-radius:7px;box-shadow:0 2px 6px rgba(180,110,60,.1);cursor:pointer}
 .fbtn1:hover{border-color:var(--line-hi)}
 .fbtn1.copied{color:#4f7a58;background:#eef4ee;border-color:#cfe0d1}
+.fbtn2.copied{color:#4f7a58}
+.savestat{display:flex;align-items:center;font-weight:500;font-size:15px;line-height:1;color:var(--t-mut);padding:0 6px}
+.savestat.saving{color:var(--t-mut)}
+.savestat.pending,.savestat.error{color:#c2401f;cursor:pointer}
+.savestat.error{text-decoration:underline;text-decoration-style:dotted}
 
 /* меню */
 #menu{position:fixed;z-index:80;transform-origin:top left;background:#fff;border:1px solid var(--line);border-radius:9px;
@@ -281,6 +286,8 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;back
   <div class="content" id="content"></div>
   <div class="foot" id="foot">
     <span class="cnt" id="cntBox"></span>
+    <button class="fbtn2" id="undoBtn" style="display:none"></button>
+    <span class="savestat" id="saveStatus"></span>
     <button class="fbtn2" id="clearBtn">Сброс</button>
     <button class="fbtn1" id="copyBtn">Сохранить</button>
   </div>
@@ -309,6 +316,59 @@ DATA.projects.forEach(p=>{
 });
 const changes = [];
 
+/* ── отмена (снимок перед каждым изменением данных) ── */
+const UNDO_LIMIT = 20;
+let UNDO_STACK = [];
+let PREV_SNAPSHOT = JSON.parse(JSON.stringify(DATA));
+function pushUndo(label){
+  UNDO_STACK.push({label, snap: PREV_SNAPSHOT});
+  if(UNDO_STACK.length > UNDO_LIMIT) UNDO_STACK.shift();
+  PREV_SNAPSHOT = JSON.parse(JSON.stringify(DATA));
+}
+function undo(){
+  if(!UNDO_STACK.length) return;
+  const {label, snap} = UNDO_STACK.pop();
+  DATA = snap;
+  PREV_SNAPSHOT = JSON.parse(JSON.stringify(DATA));
+  changes.push('↺ отменено: '+label);
+  scheduleAutosave();
+  rerender();
+}
+document.addEventListener('keydown', e=>{
+  if(!(e.ctrlKey||e.metaKey) || e.shiftKey || e.key.toLowerCase()!=='z') return;
+  const tag = (e.target && e.target.tagName || '').toLowerCase();
+  if(tag==='input' || tag==='textarea') return;
+  e.preventDefault(); undo();
+});
+
+/* ── автосохранение (debounce 2с после последнего изменения) ── */
+const AUTOSAVE_DELAY = 2000;
+let SAVE_STATE = 'saved'; // saved | pending | saving | error
+let autosaveTimer = null;
+function scheduleAutosave(){
+  SAVE_STATE = 'pending';
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(doAutosave, AUTOSAVE_DELAY);
+  updateFoot();
+}
+async function doAutosave(){
+  clearTimeout(autosaveTimer); autosaveTimer = null;
+  if(!changes.length){ SAVE_STATE = 'saved'; updateFoot(); return }
+  SAVE_STATE = 'saving'; updateFoot();
+  const subject = changes.length===1 ? changes[0].replace(/\n/g,' ') : 'Автосохранение: '+changes.length+' изм.';
+  const message = subject + (changes.length>1 ? '\n\n'+changes.join('\n') : '');
+  try{
+    await ghSave(DATA, message);
+    SAVED = JSON.parse(JSON.stringify(DATA));
+    changes.length = 0;
+    SAVE_STATE = 'saved';
+  }catch(err){
+    SAVE_STATE = 'error';
+  }
+  updateFoot();
+}
+function saveNow(){ doAutosave() }
+
 /* ── GitHub sync (приватный репозиторий с задачами) ── */
 const GH_OWNER = 'Alfarion12';
 const GH_REPO = 'tasks-data';
@@ -336,14 +396,14 @@ async function ghLoad(){
     return normalizeBoard(JSON.parse(b64DecodeUtf8(j.content.replace(/\n/g,''))));
   }catch(e){ return null }
 }
-async function ghSave(data){
+async function ghSave(data, message){
   const t = ghToken();
   if(!t) throw new Error('нет токена');
   try{
     const cur = await fetch(GH_API, {headers:{'Authorization':'token '+t,'Accept':'application/vnd.github+json'}});
     if(cur.ok){ const j = await cur.json(); ghSha = j.sha }
   }catch(e){}
-  const body = {message:'Update board '+new Date().toISOString(), content:b64EncodeUtf8(JSON.stringify(data, null, 2)), sha:ghSha};
+  const body = {message: message || ('Update board '+new Date().toISOString()), content:b64EncodeUtf8(JSON.stringify(data, null, 2)), sha:ghSha};
   const res = await fetch(GH_API, {method:'PUT', headers:{'Authorization':'token '+t,'Accept':'application/vnd.github+json','Content-Type':'application/json'}, body:JSON.stringify(body)});
   if(res.status===401){ localStorage.removeItem('ghToken'); throw new Error('токен не принят, введите заново') }
   if(res.status===409){
@@ -358,7 +418,7 @@ async function ghSave(data){
 (async function(){
   if(!localStorage.getItem('ghToken')) ghToken();
   const remote = await ghLoad();
-  if(remote && !changes.length){ DATA = remote; SAVED = JSON.parse(JSON.stringify(DATA)); rerender() }
+  if(remote && !changes.length){ DATA = remote; SAVED = JSON.parse(JSON.stringify(DATA)); PREV_SNAPSHOT = JSON.parse(JSON.stringify(DATA)); rerender() }
 })();
 const menu = document.getElementById('menu');
 let mode = 'tactics', projIdx = 0, donePeriod = 'all', LASTMODE = 'tactics';
@@ -409,7 +469,7 @@ function segCount(ice){ if(!ice) return 0; if(ice<300) return 1; if(ice<450) ret
 function iceOnOf(c){ return c.ice != null }
 function shortOf(s){ return s.length<=45 ? s : s.slice(0,42)+'…' }
 function newId(p){ return p+Math.floor(performance.now()*1000)+Math.floor(Math.random()*1e6) }
-function logChange(m){ changes.push(m); COPIED = false; updateFoot() }
+function logChange(m){ changes.push(m); pushUndo(m); scheduleAutosave() }
 
 /* ── меню ── */
 let SCALE = 1, OFFX = 0;
@@ -1144,28 +1204,52 @@ function rerender(){
   updateFoot();
 }
 function updateFoot(){
-  const c1 = document.getElementById('copyBtn'), c2 = document.getElementById('clearBtn');
   const box = document.getElementById('cntBox');
   const dirty = changes.length > 0;
   box.classList.toggle('show', dirty);
   if(dirty) box.textContent = changes.length+' изм.';
-  c2.textContent = mode==='done' && !dirty ? 'Выгрузить' : 'Сброс';
-  c1.textContent = TEMPLBL ? TEMPLBL
-    : dirty ? (COPIED ? 'В буфере' : 'Сохранить')
-    : (mode==='strategy' ? 'В тактику' : mode==='done' ? 'Итог недели' : 'Сохранить');
-  c1.classList.toggle('copied', !!(dirty && COPIED) || !!TEMPLBL);
-  c1.dataset.act = dirty ? 'apply' : (mode==='strategy' ? 'toTactics' : mode==='done' ? 'weekly' : 'apply');
-  if(mode==='ideas' && !dirty && !TEMPLBL){ c1.textContent='Сохранить'; c1.dataset.act='apply' }
-  c2.dataset.act = (mode==='done' && !dirty) ? 'export' : 'reset';
-  c1.style.opacity = (c1.dataset.act==='apply' && !dirty) ? '.45' : '1';
+
+  const st = document.getElementById('saveStatus');
+  st.classList.remove('saving','pending','error','saved');
+  if(SAVE_STATE==='saving'){ st.textContent='Сохраняю…'; st.classList.add('saving'); st.onclick=null }
+  else if(SAVE_STATE==='error'){ st.textContent='Не сохранено · Повторить'; st.classList.add('error'); st.onclick=saveNow }
+  else if(SAVE_STATE==='pending'){ st.textContent='Не сохранено'; st.classList.add('pending'); st.onclick=saveNow }
+  else { st.textContent='Сохранено'; st.classList.add('saved'); st.onclick=null }
+
+  const ub = document.getElementById('undoBtn');
+  if(UNDO_STACK.length){ ub.style.display=''; ub.textContent='Отменить: '+UNDO_STACK[UNDO_STACK.length-1].label }
+  else ub.style.display='none';
+
+  const c1 = document.getElementById('copyBtn'), c2 = document.getElementById('clearBtn');
+  if(mode==='strategy'){
+    c1.style.display=''; c1.dataset.act='toTactics';
+    c1.textContent = (TEMPLBL_TARGET==='copy' ? TEMPLBL : null) || 'В тактику';
+    c1.classList.toggle('copied', TEMPLBL_TARGET==='copy' && !!TEMPLBL);
+  } else if(mode==='done'){
+    c1.style.display=''; c1.dataset.act='weekly';
+    c1.textContent = (TEMPLBL_TARGET==='copy' ? TEMPLBL : null) || 'Итог недели';
+    c1.classList.toggle('copied', TEMPLBL_TARGET==='copy' && !!TEMPLBL);
+  } else {
+    c1.style.display='none';
+  }
+  if(mode==='done'){
+    c2.style.display=''; c2.dataset.act='export';
+    c2.textContent = (TEMPLBL_TARGET==='clear' ? TEMPLBL : null) || 'Выгрузить';
+    c2.classList.toggle('copied', TEMPLBL_TARGET==='clear' && !!TEMPLBL);
+  } else {
+    c2.style.display='none';
+  }
 }
-function changeText(){ return 'Внедри изменения в доски задач:\n— ' + changes.join('\n— ') }
 window.addEventListener('beforeunload', (e)=>{
-  if(changes.length){ e.preventDefault(); e.returnValue = '' }
+  if(changes.length || SAVE_STATE==='saving'){
+    if(SAVE_STATE!=='saving'){ clearTimeout(autosaveTimer); doAutosave() }
+    e.preventDefault(); e.returnValue = '';
+  }
 });
+document.getElementById('undoBtn').onclick = ()=> undo();
 
 /* ── подвал ── */
-let COPIED = false, TEMPLBL = null;
+let TEMPLBL = null, TEMPLBL_TARGET = null;
 function legacyCopy(text){
   try{
     const ta = document.createElement('textarea');
@@ -1185,9 +1269,9 @@ function toClipboard(text, after){
     navigator.clipboard.writeText(text).then(ok).catch(()=>manualCopy(text));
   else manualCopy(text);
 }
-function tempLabel(btn, text){
-  TEMPLBL = text; updateFoot();
-  setTimeout(()=>{ TEMPLBL = null; updateFoot() }, 2600);
+function tempLabel(target, text){
+  TEMPLBL = text; TEMPLBL_TARGET = target; updateFoot();
+  setTimeout(()=>{ TEMPLBL = null; TEMPLBL_TARGET = null; updateFoot() }, 2600);
 }
 function manualCopy(text){
   const m = document.getElementById('dm');
@@ -1204,32 +1288,19 @@ function doneList(days){
 }
 document.getElementById('copyBtn').onclick = (e)=>{
   const act = e.currentTarget.dataset.act;
-  if(act==='apply'){
-    if(!changes.length) return;
-    const btn = e.currentTarget;
-    btn.disabled = true; btn.textContent = 'Сохраняю…';
-    ghSave(DATA).then(()=>{
-      SAVED = JSON.parse(JSON.stringify(DATA));
-      changes.length = 0; btn.disabled = false; tempLabel(btn,'Сохранено');
-    }).catch(err=>{
-      btn.disabled = false; updateFoot();
-      alert('Не удалось сохранить в GitHub: '+err.message);
-    });
-  } else if(act==='toTactics'){ mode='tactics'; rerender() }
+  if(act==='toTactics'){ mode='tactics'; rerender() }
   else if(act==='weekly'){
     const l = doneList(7);
     const txt = 'Итог недели · '+proj().label+' · закрыто '+l.length+':\n'
       + l.map(c=>'— '+c.plain+(c.doneAt?' ('+fmtDone(c.doneAt)+')':'')).join('\n');
-    toClipboard(txt, ()=>tempLabel(null,'В буфере'));
+    toClipboard(txt, ()=>tempLabel('copy','В буфере'));
   }
 };
 document.getElementById('clearBtn').onclick = (e)=>{
   if(e.currentTarget.dataset.act==='export'){
     const l = doneList(donePeriod==='week'?7:donePeriod==='month'?31:donePeriod==='quarter'?92:null);
-    toClipboard('Выполнено · '+proj().label+':\n'+l.map(c=>'— '+c.plain).join('\n'), ()=>tempLabel(null,'В буфере'));
-    return;
+    toClipboard('Выполнено · '+proj().label+':\n'+l.map(c=>'— '+c.plain).join('\n'), ()=>tempLabel('clear','В буфере'));
   }
-  DATA = JSON.parse(JSON.stringify(SAVED)); changes.length = 0; rerender();
 };
 document.addEventListener('contextmenu', e=>{
   const tg = e.target;
