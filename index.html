@@ -12,7 +12,7 @@
 СЛУЖЕБНОЕ ДЛЯ CLAUDE (любой будущей сессии; не удалять при обновлениях):
 Живой дашборд задач Александра, артефакт id: moi-zadachi. Дизайн «тёплая бумага» (хендофф Claude Design, 07.2026).
 1. Данные — в <script id="boardData" type="application/json">. Карточка: id, plain, short, ice, iceOn, done, color,
-   subs[{plain,done}], due('YYYY-MM-DD[ HH:MM]'), prio(0/1/2), desc, doneAt(ISO), fromCol. Колонка: name, cards, preset(0..5).
+   subs[{plain,done,now}], due('YYYY-MM-DD[ HH:MM]'), prio(0/1), desc, doneAt(ISO), fromCol. Колонка: name, cards, preset(0..5).
    Бейдж карточки НЕ хранится — он вычисляется из plain: часть до «:» или до «. » (≤60 симв.).
    ★ Три дома, один элемент — одно место (30.07): Тактика/Стратегия (взято в работу) · Очередь (сформулировано, ждёт часа,
    поле queue[] у проекта, порядок ручной перетаскиванием, «Отсортировать по баллу» — пунктом меню колонки) · Идеи (проект inbox, сырьё, поле tag = проект).
@@ -155,7 +155,13 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;back
 
 .subs{display:flex;flex-direction:column;gap:22px;margin-top:14px;padding-top:14px;border-top:1px solid var(--divider)}
 .card.folded .subs{display:none}
-.sub{position:relative;display:flex;align-items:flex-start;gap:14px}
+.sub{position:relative;display:flex;align-items:flex-start;gap:14px;padding:4px 0 4px 24px;border-radius:8px}
+.sub.now{background:#f9f0e2}
+.snow{position:absolute;left:1px;top:8px;width:13px;height:13px;border-radius:50%;border:1.5px solid #ddd3c6;
+  background:#fff;cursor:pointer;visibility:hidden;transition:background .14s ease,border-color .14s ease}
+.card:hover .snow{visibility:visible}
+.snow:hover{border-color:var(--accent)}
+.sub.now .snow{visibility:visible;background:var(--accent);border-color:var(--accent)}
 .schk{flex:0 0 22px;display:flex;justify-content:center;margin-right:-3px}
 .sdelw{position:absolute;right:-3px;top:23px;width:22px;height:18px;z-index:3;display:flex;align-items:center;justify-content:center}
 .stx{font-weight:400;font-size:17px;line-height:1.45;color:#5f584f;flex:1}
@@ -295,6 +301,12 @@ function normalizeBoard(d){
 }
 let DATA = normalizeBoard(JSON.parse(INIT));
 let SAVED = JSON.parse(JSON.stringify(DATA));
+DATA.projects.forEach(p=>{
+  ['strategy','tactics','queue','done'].forEach(b=>{ (p[b]||[]).forEach(col=>{ (col.cards||[]).forEach(c=>{
+    if(c.prio===2) c.prio = 1;
+    if(c.color !== undefined) delete c.color;
+  })})});
+});
 const changes = [];
 
 /* ── GitHub sync (приватный репозиторий с задачами) ── */
@@ -505,12 +517,9 @@ function renderCard(c, col, colIdx, heavy){
   const T = tone(colIdx, col);
   const d = el('div','card'+(heavy?' heavy':''));
   d.draggable = true; d.dataset.id = c.id;
-  if(c.color) d.style.background = 'linear-gradient(rgba('+rgb(c.color)+',.15),rgba('+rgb(c.color)+',.15)), #fff';
   const [badge, title] = splitTitle(c.plain, c);
 
-  d.style.borderLeft = c.prio===2 ? '5px solid #c2401f'
-    : c.prio===1 ? '4px solid var(--accent)'
-    : '3px solid '+(c.color || T.spine);
+  d.style.borderLeft = c.prio ? '5px solid #c2401f' : '3px solid '+T.spine;
 
   const brow = el('div','brow');
   if(mode==='ice' && c.ice != null){
@@ -543,8 +552,6 @@ function renderCard(c, col, colIdx, heavy){
     const lbl = dv.slice(8,10)+'.'+dv.slice(5,7)+(tv?' '+tv:'');
     chips.push(over ? '<span class="chip over">просрочено · '+lbl+'</span>' : '<span class="chip">до '+lbl+'</span>');
   }
-  if(c.prio===1) chips.push('<span class="chip warn">важно</span>');
-  if(c.prio===2) chips.push('<span class="chip crit">критично</span>');
   if(c.desc) chips.push('<span class="chip dsc" title="есть описание">≡</span>');
   if(chips.length) d.appendChild(el('div','mrow', chips.join('')));
 
@@ -556,7 +563,7 @@ function renderCard(c, col, colIdx, heavy){
     d.appendChild(pr);
     const box = el('div','subs'); box.style.setProperty('--btone', T.tone);
     c.subs.forEach(s=>{
-      const li = el('div','sub'+(s.done?' done':''));
+      const li = el('div','sub'+(s.done?' done':'')+(s.now?' now':''));
       const tx = el('span','stx', boldHead(s.plain));
       tx.ondblclick = (e)=>{ e.stopPropagation(); d.draggable=false;
         inlineEdit(tx, s.plain, (v)=>{ d.draggable=true;
@@ -572,6 +579,15 @@ function renderCard(c, col, colIdx, heavy){
       cb.onclick = (e)=>{ e.stopPropagation(); s.done = !s.done;
         if(s.done){ c.subs.splice(c.subs.indexOf(s),1); c.subs.push(s) }
         logChange((s.done?'✓ отмечена':'◻ снята')+' подзадача «'+s.plain+'» в «'+c.short+'» ('+proj().label+')'); rerender() };
+      const nw = el('span','snow');
+      nw.title = s.now ? 'Снять отметку «в работе»' : 'Отметить: делаю сейчас';
+      nw.onclick = (e)=>{ e.stopPropagation();
+        const was = !!s.now;
+        c.subs.forEach(x=>{ delete x.now });
+        if(!was){ s.now = true }
+        logChange((was?'○ снята отметка «в работе» с':'● в работе:')+' «'+s.plain.slice(0,40)+'» в «'+c.short+'» ('+proj().label+')');
+        rerender(); };
+      li.appendChild(nw);
       const chkw = el('span','schk'); chkw.appendChild(cb);
       const delw = el('span','sdelw'); delw.appendChild(del);
       li.append(tx, chkw, delw);
@@ -637,7 +653,7 @@ function cardMenu(btn, c, col, cardEl){
   }
   mk('⚑ Приоритет', ()=>{
     menu.innerHTML = '';
-    [['Обычный',0],['Важный',1],['Критичный',2]].forEach(([l,v])=>{
+    [['Обычный',0],['Важный',1]].forEach(([l,v])=>{
       mk(((c.prio||0)===v?'● ':'○ ')+l, ()=>{ c.prio=v;
         logChange('⚑ приоритет «'+c.short+'» ('+proj().label+'): '+l); closeMenu(); rerender() });
     });
@@ -674,12 +690,6 @@ function cardMenu(btn, c, col, cardEl){
   });
   }
   mk('≡ Описание', ()=>{ closeMenu(); openDesc(c) });
-  mk('◐ Цвет задачи', (e)=>{ e.stopPropagation();
-    if(menu.querySelector('.palgrid')){ menu.querySelector('.palgrid').remove(); return }
-    palette(CARDTINT, (hex)=>{ c.color = hex;
-      logChange(hex ? 'цвет «'+c.short+'» → '+hex+' ('+proj().label+')' : 'цвет снят у «'+c.short+'» ('+proj().label+')');
-      closeMenu(); rerender() });
-  });
   mk('✕ Удалить задачу', ()=>{ closeMenu();
     col.cards.splice(col.cards.indexOf(c),1);
     logChange('✕ удалена «'+c.short+'» ('+proj().label+', '+col.name+')'); rerender() }, 'danger');
