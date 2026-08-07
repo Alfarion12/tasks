@@ -231,8 +231,8 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;back
 
 /* подвал */
 .foot{margin-top:auto;padding:0 0 28px;height:50px;box-sizing:content-box;display:flex;justify-content:flex-end;align-items:stretch;gap:14px}
-.cnt{display:none;align-items:center;font-weight:500;font-size:15px;line-height:1;color:var(--t-mut);background:transparent;padding:0 6px}
-.cnt.show{display:flex}
+.footicon{flex:none;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:none;background:#f7f2ea;font-weight:400;font-size:16px;line-height:1;color:#9c948a;cursor:pointer;border-radius:7px;transition:background .14s ease,color .14s ease}
+.footicon:hover{color:var(--accent);background:#f0e7da}
 .fbtn2{display:flex;align-items:center;font-weight:500;font-size:16px;line-height:1;color:var(--t-mut);padding:0 10px;border:none;background:transparent;cursor:pointer}
 .fbtn2:hover{color:var(--t-task)}
 .fbtn1{display:flex;align-items:center;font-weight:600;font-size:16px;line-height:1;color:var(--accent);background:#fff;border:1px solid var(--line);
@@ -285,8 +285,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;back
   <div class="row2"><div class="modeswrap" id="modeswrap"><div class="modes" id="modes"></div></div><div class="projs" id="projs"></div></div>
   <div class="content" id="content"></div>
   <div class="foot" id="foot">
-    <span class="cnt" id="cntBox"></span>
-    <button class="fbtn2" id="undoBtn" style="display:none"></button>
+    <button class="footicon" id="undoBtn" style="display:none" title="Отменить">↺</button>
     <span class="savestat" id="saveStatus"></span>
     <button class="fbtn2" id="clearBtn">Сброс</button>
     <button class="fbtn1" id="copyBtn">Сохранить</button>
@@ -1204,11 +1203,6 @@ function rerender(){
   updateFoot();
 }
 function updateFoot(){
-  const box = document.getElementById('cntBox');
-  const dirty = changes.length > 0;
-  box.classList.toggle('show', dirty);
-  if(dirty) box.textContent = changes.length+' изм.';
-
   const st = document.getElementById('saveStatus');
   st.classList.remove('saving','pending','error','saved');
   if(SAVE_STATE==='saving'){ st.textContent='Сохраняю…'; st.classList.add('saving'); st.onclick=null }
@@ -1217,8 +1211,7 @@ function updateFoot(){
   else { st.textContent='Сохранено'; st.classList.add('saved'); st.onclick=null }
 
   const ub = document.getElementById('undoBtn');
-  if(UNDO_STACK.length){ ub.style.display=''; ub.textContent='Отменить' }
-  else ub.style.display='none';
+  ub.style.display = UNDO_STACK.length ? '' : 'none';
 
   const c1 = document.getElementById('copyBtn'), c2 = document.getElementById('clearBtn');
   if(mode==='strategy'){
