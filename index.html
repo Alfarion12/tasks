@@ -130,7 +130,12 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;back
 .badge{font-weight:600;font-size:12px;line-height:1;letter-spacing:.1em;text-transform:uppercase;padding:5px 8px;border-radius:4px}
 .card.heavy .badge{padding:6px 9px}
 .mbtn{flex:none;display:flex;align-items:center;justify-content:center;width:36px;height:36px;margin:-8px -10px 0 0;border:none;background:#f7f2ea;font-weight:400;font-size:18px;line-height:1;color:#9c948a;cursor:pointer;border-radius:7px;transition:background .14s ease,color .14s ease}
-.mbtn:hover{color:var(--accent);background:#f0e7da}
+.mbtn:hover{color:var(--ctone,var(--accent));background:var(--cwell,#f0e7da)}
+.qbtns{flex:none;display:flex;align-items:center;gap:2px;margin:-3px 4px 0 0}
+.qbtn{flex:none;display:flex;align-items:center;justify-content:center;width:26px;height:26px;border:none;background:transparent;font-weight:400;font-size:15px;line-height:1;color:#b4aca1;cursor:pointer;border-radius:6px;visibility:hidden;transition:background .14s ease,color .14s ease}
+.card:hover .qbtn{visibility:visible}
+.qbtn:hover{color:var(--ctone,var(--accent));background:var(--cwell,#f0e7da)}
+.qbtn.on{color:#c2401f}
 .title{flex:1;font-weight:400;font-size:20px;line-height:1.42;color:var(--t-big);text-wrap:pretty}
 .title b{font-weight:700}
 .card.heavy .title{font-weight:400;font-size:23px;line-height:1.4;color:var(--t-big)}
@@ -579,6 +584,8 @@ function renderCard(c, col, colIdx, heavy){
   const [badge, title] = splitTitle(c.plain, c);
 
   d.style.borderLeft = c.prio ? '5px solid #c2401f' : '3px solid '+T.spine;
+  d.style.setProperty('--ctone', T.tone);
+  d.style.setProperty('--cwell', T.well);
 
   const brow = el('div','brow');
   if(mode==='ice' && c.ice != null){
@@ -589,6 +596,22 @@ function renderCard(c, col, colIdx, heavy){
   }
   const t = el('div','title', (badge ? '<b style="color:'+T.tone+'">'+esc(badge)+'.</b> ' : '')+esc(title));
   brow.appendChild(t);
+  const qb = el('div','qbtns');
+  const qAdd = el('button','qbtn','＋'); qAdd.title = 'Добавить подзадачу';
+  qAdd.onclick = (e)=>{ e.stopPropagation(); closeMenu(); addSub(c, d) };
+  const qPrio = el('button','qbtn'+(c.prio?' on':''),'⚑');
+  qPrio.title = c.prio ? 'Снять приоритет' : 'Отметить как важную';
+  qPrio.onclick = (e)=>{ e.stopPropagation(); closeMenu();
+    c.prio = c.prio ? 0 : 1;
+    logChange('⚑ приоритет «'+c.short+'» ('+proj().label+'): '+(c.prio?'важный':'обычный'));
+    rerender() };
+  const qDue = el('button','qbtn','◷');
+  qDue.title = c.due ? 'Изменить дедлайн' : 'Поставить дедлайн';
+  qDue.onclick = (e)=>{ e.stopPropagation();
+    if(menu.style.display==='block' && menu.dataset.for===c.id){ closeMenu(); return }
+    menu.dataset.for = c.id; dueMenu(qDue, c) };
+  qb.append(qAdd, qPrio, qDue);
+  brow.appendChild(qb);
   const mb = el('button','mbtn','⋮');
   brow.appendChild(mb); d.appendChild(brow);
   t.ondblclick = (e)=>{ e.stopPropagation(); d.draggable=false;
@@ -697,6 +720,23 @@ function renderCard(c, col, colIdx, heavy){
   return d;
 }
 
+function dueMenu(btn, c){
+  menu.innerHTML = '';
+  const p = el('div','mpanel','<input type="date" id="mDate"><input type="time" id="mTime">');
+  menu.appendChild(p);
+  const parts = (c.due||'').split(' ');
+  p.querySelector('#mDate').value = parts[0]||''; p.querySelector('#mTime').value = parts[1]||'';
+  const r = el('div','mrow2');
+  const rb = el('button','danger','Убрать'), sb = el('button','msave','Сохранить');
+  rb.onclick=(e)=>{e.stopPropagation(); c.due=null; logChange('◷ дедлайн убран у «'+c.short+'» ('+proj().label+')'); closeMenu(); rerender()};
+  sb.onclick=(e)=>{e.stopPropagation();
+    const dv=p.querySelector('#mDate').value, tv=p.querySelector('#mTime').value;
+    c.due = dv ? (dv+(tv?' '+tv:'')) : null;
+    logChange('◷ дедлайн «'+c.short+'» ('+proj().label+'): '+(c.due||'убран')); closeMenu(); rerender()};
+  r.append(rb, sb); menu.appendChild(r);
+  menuAt(btn); clampMenu();
+}
+
 function cardMenu(btn, c, col, cardEl){
   menu.innerHTML = '';
   const home = homeOf();
@@ -720,21 +760,7 @@ function cardMenu(btn, c, col, cardEl){
     });
     clampMenu();
   });
-  mk('◷ Дедлайн', ()=>{
-    menu.innerHTML = '';
-    const p = el('div','mpanel','<input type="date" id="mDate"><input type="time" id="mTime">');
-    menu.appendChild(p);
-    const parts = (c.due||'').split(' ');
-    p.querySelector('#mDate').value = parts[0]||''; p.querySelector('#mTime').value = parts[1]||'';
-    const r = el('div','mrow2');
-    const rb = el('button','danger','Убрать'), sb = el('button','msave','Сохранить');
-    rb.onclick=(e)=>{e.stopPropagation(); c.due=null; logChange('◷ дедлайн убран у «'+c.short+'» ('+proj().label+')'); closeMenu(); rerender()};
-    sb.onclick=(e)=>{e.stopPropagation();
-      const dv=p.querySelector('#mDate').value, tv=p.querySelector('#mTime').value;
-      c.due = dv ? (dv+(tv?' '+tv:'')) : null;
-      logChange('◷ дедлайн «'+c.short+'» ('+proj().label+'): '+(c.due||'убран')); closeMenu(); rerender()};
-    r.append(rb, sb); menu.appendChild(r); clampMenu();
-  });
+  mk('◷ Дедлайн', ()=>{ dueMenu(btn, c) });
   if(home==='queue'){
   mk('◆ Балл ICE', ()=>{
     menu.innerHTML='';
