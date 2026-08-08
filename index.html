@@ -107,6 +107,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;back
 .wellh .colmb:hover{color:var(--accent);border-color:var(--line-hi);background:rgba(255,255,255,.5)}
 .stack{flex:1;min-height:70px;overflow-y:auto;scrollbar-gutter:stable;padding:0 14px 0 20px;display:flex;flex-direction:column;gap:12px}
 .stack.over{outline:2px dashed rgba(138,90,63,.28);outline-offset:-4px;border-radius:8px}
+.card.subdrop{outline:2px dashed rgba(138,90,63,.28);outline-offset:-4px}
 .wellh{cursor:grab}
 .well.coldrag{outline:2px dashed var(--line-drag);outline-offset:-3px}
 .well.colover{outline:2px dashed rgba(138,90,63,.4);outline-offset:-3px}
@@ -577,7 +578,7 @@ function inlineEdit(node, value, onSave, multiline){
 }
 
 /* ── карточка ── */
-function renderCard(c, col, colIdx, heavy){
+function renderCard(c, col, colIdx, cols, heavy){
   const T = tone(colIdx, col);
   const d = el('div','card'+(heavy?' heavy':''));
   d.draggable = true; d.dataset.id = c.id;
@@ -677,7 +678,7 @@ function renderCard(c, col, colIdx, heavy){
       li.append(tx, chkw, delw);
       li.draggable = true; li.dataset.sub = String(c.subs.indexOf(s));
       li.addEventListener('dragstart', ev=>{ ev.stopPropagation();
-        window.__dragSub = {card:c, sub:s};
+        window.__dragSub = {card:c, sub:s, cols};
         if(ev.dataTransfer){ ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain','sub') }
         startGhost(li, ev);
         setTimeout(()=>li.classList.add('subdrag'),0); });
@@ -685,9 +686,9 @@ function renderCard(c, col, colIdx, heavy){
       box.appendChild(li);
     });
     box.addEventListener('dragover', ev=>{
-      const ds = window.__dragSub; if(!ds || ds.card !== c) return;
+      const ds = window.__dragSub; if(!ds || ds.cols !== cols) return;
       ev.preventDefault(); ev.stopPropagation();
-      const dr = box.querySelector('.sub.subdrag'); if(!dr) return;
+      const dr = document.querySelector('.sub.subdrag'); if(!dr) return;
       const items = [...box.querySelectorAll('.sub:not(.subdrag)')];
       let after=null, off=-Infinity;
       items.forEach(it=>{ const b=it.getBoundingClientRect(); const o=ev.clientY-b.top-b.height/2;
@@ -695,14 +696,18 @@ function renderCard(c, col, colIdx, heavy){
       if(after==null) box.appendChild(dr); else box.insertBefore(dr, after);
     });
     box.addEventListener('drop', ev=>{
-      const ds = window.__dragSub; if(!ds || ds.card !== c) return;
+      const ds = window.__dragSub; if(!ds || ds.cols !== cols) return;
       ev.preventDefault(); ev.stopPropagation(); window.__dragSub = null;
-      const order = [...box.querySelectorAll('.sub')].map(x=>+x.dataset.sub);
-      c.subs = order.map(i=>c.subs[i]);
-      const pos = c.subs.indexOf(ds.sub);
-      const prev = pos>0 ? c.subs[pos-1] : null;
-      logChange('подзадача «'+ds.sub.plain.slice(0,40)+'» в «'+c.short+'»: переставлена '
-        + (prev ? 'под «'+prev.plain.slice(0,30)+'»' : 'в начало'));
+      if(ds.card === c){
+        const order = [...box.querySelectorAll('.sub')].map(x=>+x.dataset.sub);
+        c.subs = order.map(i=>c.subs[i]);
+        const pos = c.subs.indexOf(ds.sub);
+        const prev = pos>0 ? c.subs[pos-1] : null;
+        logChange('подзадача «'+ds.sub.plain.slice(0,40)+'» в «'+c.short+'»: переставлена '
+          + (prev ? 'под «'+prev.plain.slice(0,30)+'»' : 'в начало'));
+      } else {
+        moveSubBetweenCards(ds, c, [...box.querySelectorAll('.sub')].indexOf(document.querySelector('.sub.subdrag')));
+      }
       rerender();
     });
     d.appendChild(box);
@@ -717,6 +722,18 @@ function renderCard(c, col, colIdx, heavy){
     startGhost(d, e);
     setTimeout(()=>d.classList.add('dragging'),0); });
   d.addEventListener('dragend', ()=>d.classList.remove('dragging'));
+  d.addEventListener('dragover', ev=>{
+    const ds = window.__dragSub; if(!ds || ds.cols !== cols || ds.card === c) return;
+    ev.preventDefault(); ev.stopPropagation(); d.classList.add('subdrop');
+  });
+  d.addEventListener('dragleave', ()=>d.classList.remove('subdrop'));
+  d.addEventListener('drop', ev=>{
+    const ds = window.__dragSub; if(!ds || ds.cols !== cols || ds.card === c) return;
+    ev.preventDefault(); ev.stopPropagation(); window.__dragSub = null;
+    d.classList.remove('subdrop');
+    moveSubBetweenCards(ds, c, null);
+    rerender();
+  });
   return d;
 }
 
@@ -826,6 +843,17 @@ function completeCard(c, col){
   logChange('✓ «'+c.short+'» ('+p.label+') выполнена → Готово');
   rerender();
 }
+function moveSubBetweenCards(ds, targetCard, insertIdx){
+  const srcIdx = ds.card.subs.indexOf(ds.sub);
+  if(srcIdx===-1) return;
+  ds.card.subs.splice(srcIdx,1);
+  targetCard.subs = targetCard.subs || [];
+  if(ds.sub.now){ targetCard.subs.forEach(x=>{ delete x.now }) }
+  const at = (insertIdx==null || insertIdx<0) ? targetCard.subs.length : Math.min(insertIdx, targetCard.subs.length);
+  targetCard.subs.splice(at, 0, ds.sub);
+  targetCard._fold = false;
+  logChange('подзадача «'+ds.sub.plain.slice(0,40)+'» перенесена из «'+ds.card.short+'» в «'+targetCard.short+'» ('+proj().label+')');
+}
 function addSub(c, cardEl){
   const inp = document.createElement('input');
   inp.className='subadd'; inp.placeholder='Текст подзадачи… (Enter)';
@@ -895,7 +923,7 @@ function buildWell(col, i, cols, heavy){
   if(PENDING_COL === col){ PENDING_COL = null; setTimeout(()=>nm.ondblclick(), 20) }
 
   const stack = el('div','stack'); stack.dataset.col = col.name;
-  col.cards.forEach(c=>stack.appendChild(renderCard(c, col, i, heavy || (mode==='tactics' && i===0))));
+  col.cards.forEach(c=>stack.appendChild(renderCard(c, col, i, cols, heavy || (mode==='tactics' && i===0))));
   w.appendChild(stack);
 
   const aw = el('div','addwrap');
