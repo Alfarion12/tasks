@@ -427,6 +427,9 @@ async function ghSave(data, message){
 })();
 const menu = document.getElementById('menu');
 let mode = 'tactics', projIdx = 0, donePeriod = 'all', LASTMODE = 'tactics';
+/* что спрятано в интерфейсе. Данные остаются на месте: убрать флаг — вернётся как было.
+   ideas: раздел «Идеи» и перенос карточек туда. projects: id проектов, скрытых из переключателя. */
+const HIDDEN = { ideas: true, projects: ['skrillme'] };
 
 const TONES = [
   {well:'#fbe9d8', tone:'#a1562c', badge:'#f4dcc4', seg:'#c8763f', spine:'#dd9a6e'},
@@ -571,6 +574,9 @@ function inlineEdit(node, value, onSave, multiline){
     const v = f.value.trim();
     if(save && v && v !== value) onSave(v); else onSave(null);
   };
+  f.onmousedown = (e)=>e.stopPropagation();
+  f.onclick = (e)=>e.stopPropagation();
+  f.ondblclick = (e)=>e.stopPropagation();
   f.onblur = ()=>fin(true);
   f.onkeydown = (e)=>{ e.stopPropagation();
     if(e.key==='Enter' && !(multiline && e.shiftKey)){ e.preventDefault(); fin(true) }
@@ -761,10 +767,10 @@ function cardMenu(btn, c, col, cardEl){
   mk('＋ Подзадача', ()=>{ closeMenu(); addSub(c, cardEl) });
   if(home==='tactics'){
     mk('↓ На скамейку', ()=>{ closeMenu(); toQueue(c, col) });
-    mk('↓ В идеи',    ()=>{ closeMenu(); toIdeas(c, col) });
+    if(!HIDDEN.ideas) mk('↓ В идеи',    ()=>{ closeMenu(); toIdeas(c, col) });
   } else if(home==='queue'){
     mk('↑ В тактику', ()=>{ closeMenu(); toTactics(c, col) });
-    mk('↓ В идеи',    ()=>{ closeMenu(); toIdeas(c, col) });
+    if(!HIDDEN.ideas) mk('↓ В идеи',    ()=>{ closeMenu(); toIdeas(c, col) });
   } else {
     mk('↑ В тактику', ()=>{ closeMenu(); toTactics(c, col) });
     mk('↑ На скамейку', ()=>{ closeMenu(); toQueue(c, col) });
@@ -1205,7 +1211,7 @@ const MODES = [['ice','Скамейка'],['tactics','Тактика'],['done','
 function modeLabel(k, def){ return (DATA.modeLabels && DATA.modeLabels[k]) || def }
 function bindDual(btn, onClick, onDbl){
   let timer = null;
-  btn.onclick = ()=>{ if(timer) return; timer = setTimeout(()=>{ timer = null; onClick() }, 190) };
+  btn.onclick = ()=>{ if(timer || btn.querySelector('input,textarea')) return; timer = setTimeout(()=>{ timer = null; onClick() }, 190) };
   btn.ondblclick = (e)=>{ e.stopPropagation(); if(timer){ clearTimeout(timer); timer = null } onDbl() };
 }
 function renameMode(node, k, def){
@@ -1216,9 +1222,10 @@ function renameMode(node, k, def){
     rerender(); });
 }
 function ideasProj(){ return DATA.projects.find(p=>p.id==='inbox') }
-function realProjects(){ return DATA.projects.filter(p=>p.id!=='inbox') }
+function realProjects(){ return DATA.projects.filter(p=>p.id!=='inbox' && !HIDDEN.projects.includes(p.id)) }
 function rerender(){
   closeMenu();
+  if(HIDDEN.ideas && mode==='ideas') mode = LASTMODE || 'tactics';
   const mr = document.getElementById('modes'); mr.innerHTML='';
   const sb0 = el('button','mode'+(mode==='strategy'?' on':''), esc(modeLabel('strategy','Стратегия')));
   bindDual(sb0, ()=>{ mode='strategy'; rerender() }, ()=>renameMode(sb0, 'strategy', 'Стратегия'));
@@ -1230,6 +1237,9 @@ function rerender(){
     mr.appendChild(b);
   });
   const ib2 = document.getElementById('ideasBtn'), tb2 = document.getElementById('tasksBtn');
+  const tdv = document.querySelector('.tdiv');
+  ib2.style.display = HIDDEN.ideas ? 'none' : '';
+  if(tdv) tdv.style.display = HIDDEN.ideas ? 'none' : '';
   const isIdeas = mode==='ideas';
   ib2.classList.toggle('on', isIdeas);
   tb2.classList.toggle('on', !isIdeas);
